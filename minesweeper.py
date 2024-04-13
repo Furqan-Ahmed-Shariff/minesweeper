@@ -195,17 +195,13 @@ class MinesweeperAI:
 
         self.mark_safe(cell)
 
-        for sen in self.knowledge:
-            if sen.cells == set():
-                self.knowledge.remove(sen)
-
         potential_cells = []
         for i, j in itertools.product(
             range(cell[0] - 1, cell[0] + 2), range(cell[1] - 1, cell[1] + 2)
         ):
             if (
-                0 <= i <= 7
-                and 0 <= j <= 7
+                0 <= i < self.height
+                and 0 <= j < self.width
                 and (i, j) != cell
                 and (i, j) not in self.safes
             ):
@@ -215,45 +211,64 @@ class MinesweeperAI:
                 potential_cells.remove((i, j))
                 count -= 1
 
-        new_sentence = Sentence(potential_cells, count)
-        self.knowledge.append(new_sentence)
-
-        flag = 1
-        inference = []
-        to_remove = []
-        for sentence in self.knowledge:
-            if sentence.cells.issubset(new_sentence.cells) and sentence != new_sentence:
-                new_sen_cells = new_sentence.cells - sentence.cells
-                new_sen_count = new_sentence.count - sentence.count
-                inference.append(Sentence(new_sen_cells, new_sen_count))
-                if flag == 1:
-                    to_remove.append(new_sentence)
-                    flag = 0
-
-            if new_sentence.cells.issubset(sentence.cells) and sentence != new_sentence:
-                new_sen_cells = sentence.cells - new_sentence.cells
-                new_sen_count = sentence.count - new_sentence.count
-                inference.append(Sentence(new_sen_cells, new_sen_count))
-                to_remove.append(sentence)
-
-        for sentence in to_remove:
-            self.knowledge.remove(sentence)
-
-        for sentence in inference:
-            self.knowledge.append(sentence)
-
-        for sentence in self.knowledge:
-            known_safes = sentence.known_safes()
-            for cell in known_safes:
+        if count == 0:
+            for cell in potential_cells:
                 self.mark_safe(cell)
+            return
 
-            known_mines = sentence.known_mines()
-            for cell in known_mines:
-                self.mark_mine(cell)
+        new_inferences = [Sentence(potential_cells, count)]
+        # self.knowledge.append(new_sentence)
+        self.infer(new_inferences)
 
-        # self.knowledge.append(Sentence(potential_cells, count))
+    def infer(self, new_inferences):
+        for new_sentence in new_inferences:
+            for sentence in self.knowledge:
+                if sentence != new_sentence:
+                    if sentence.cells.issubset(new_sentence.cells):
+                        new_sen_cells = new_sentence.cells - sentence.cells
+                        new_sen_count = new_sentence.count - sentence.count
+                        inferred = Sentence(new_sen_cells, new_sen_count)
+                        if inferred not in new_inferences:
+                            new_inferences.append(inferred)
+                    elif new_sentence.cells.issubset(sentence.cells):
+                        new_sen_cells = sentence.cells - new_sentence.cells
+                        new_sen_count = sentence.count - new_sentence.count
+                        inferred = Sentence(new_sen_cells, new_sen_count)
+                        if inferred not in new_inferences:
+                            new_inferences.append(inferred)
 
-        # return cell
+        for sen in new_inferences:
+            if sen not in self.knowledge:
+                self.knowledge.append(sen)
+
+        for cell in self.safes:
+            for sen in self.knowledge:
+                if cell in sen.cells:
+                    sen.cells.remove(cell)
+
+        for cell in self.mines:
+            for sen in self.knowledge:
+                if cell in sen.cells:
+                    sen.cells.remove(cell)
+                    sen.count -= 1
+
+        safe = set()
+        mine = set()
+        for sentence in self.knowledge:
+            if sentence.cells == set():
+                self.knowledge.remove(sentence)
+            elif len(sentence.cells) == sentence.count:
+                for cell in sentence.cells:
+                    mine.add(cell)
+            elif sentence.count == 0:
+                for cell in sentence.cells:
+                    safe.add(cell)
+
+        for cell in safe:
+            self.mark_safe(cell)
+
+        for cell in mine:
+            self.mark_mine(cell)
 
     def make_safe_move(self):
         """
